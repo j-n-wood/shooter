@@ -4,6 +4,7 @@ playerImg = nil
 enemyImg = nil
 shootSound = nil
 exploSounds = {}
+enemyTypes = {};
 
 function love.load(arg)
   if arg[#arg] == "-debug" then require("mobdebug").start() end
@@ -11,10 +12,14 @@ function love.load(arg)
 	playerImg = love.graphics.newImage('assets/plane.png')  
 	bulletImg = love.graphics.newImage('assets/bullet.png')
 	enemyImg = love.graphics.newImage('assets/enemy.png')
+	b17Img = love.graphics.newImage('assets/B-17-2.png');
 	
 	shootSound = love.audio.newSource("assets/gun-sound.wav", "static")
 	table.insert(exploSounds,love.audio.newSource("assets/explo1.ogg", "static"));
 	table.insert(exploSounds,love.audio.newSource("assets/explo2.ogg", "static"));
+	
+	table.insert(enemyTypes, { img = enemyImg, theta = 0, ox = enemyImg:getWidth() / 2, oy = enemyImg:getHeight() / 2, numExplosions = 1 });
+	table.insert(enemyTypes, { img = b17Img, theta = math.pi, ox = b17Img:getWidth() / 2, oy = b17Img:getHeight() / 2, numExplosions = 3 });
 	
 	start()
 end
@@ -54,12 +59,20 @@ function addBullet()
 end
 
 function addEnemy() 
+	local idx = math.random(1,2);
+	local img = enemyTypes[idx].img;
+	local theta = enemyTypes[idx].theta;
+	
 	local enemy = { x = math.random(10, love.graphics.getWidth() - 10),
-		y = -enemyImg:getHeight(),
-		img = enemyImg,
+		y = -img:getHeight(),
+		img = img,
 		dx = 0,
 		dy = 150,
-		points = 10
+		points = 10,
+		theta = theta,
+		ox = enemyTypes[idx].ox,
+		oy = enemyTypes[idx].oy,
+		enemyType = enemyTypes[idx]
 	}
 	table.insert(enemies, enemy)
 end
@@ -71,33 +84,42 @@ function checkCollision(x1,y1,w1,h1, x2,y2,w2,h2)
          y2 < y1+h1
 end
 
+function spawnExplosions(x,y,count)
+	effects:spawn('explosion',x,y);
+	if (count > 1) then
+		for i=2,count,1 do
+			effects:spawn('explosion',x + math.random(-30,30),y + math.random(-30,30));
+		end
+	end
+end
+
 function collisions()
 	for i, enemy in ipairs(enemies) do
 		for j, bullet in ipairs(player.bullets) do
-			if checkCollision(enemy.x, enemy.y, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x, bullet.y, bullet.img:getWidth(), bullet.img:getHeight()) then
+			if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x, bullet.y, bullet.img:getWidth(), bullet.img:getHeight()) then
 				table.remove(player.bullets, j)
 				table.remove(enemies, i)
 				game.score = game.score + enemy.points
 				enemy.points = 0
-				local boom = exploSounds[math.random(1,#exploSounds)] :clone();
+				local boom = exploSounds[math.random(1,#exploSounds)]:clone();
 				love.audio.play(boom);
-				effects:spawn('explosion',enemy.x + enemy.img:getWidth() * 0.5,enemy.y + enemy.img:getHeight() * 0.5);
+				spawnExplosions(enemy.x,enemy.y,enemy.enemyType.numExplosions);
 			end
 		end
 
 		if (player.alive) then
-			if checkCollision(enemy.x, enemy.y, enemy.img:getWidth(), enemy.img:getHeight(), player.x, player.y, player.img:getWidth() * 0.7, player.img:getHeight() * 0.7) then 
+			if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth(), enemy.img:getHeight(), player.x, player.y, player.img:getWidth() * 0.7, player.img:getHeight() * 0.7) then 
 				table.remove(enemies, i)
 				player.alive = false
 				local x = player.x + player.img:getWidth() * 0.5;
 				local y = player.y + player.img:getHeight() * 0.5;
-				effects:spawn('explosion',x,y);
-				effects:spawn('explosion',x + math.random(-40,40),y + math.random(-40,40));
-				effects:spawn('explosion',x + math.random(-40,40),y + math.random(-40,40));
-				effects:spawn('explosion',x + math.random(-40,40),y + math.random(-40,40));
+				spawnExplosions(x,y,4);
 				effects:spawn('redSparks',x + math.random(-40,40),y + math.random(-40,40));
 				effects:spawn('greenSparks',x + math.random(-40,40),y + math.random(-40,40));
 				effects:spawn('blueSparks',x + math.random(-40,40),y + math.random(-40,40));
+				
+				local boom = exploSounds[math.random(1,#exploSounds)]:clone();
+				love.audio.play(boom);
 			end
 		end
 	end
@@ -212,7 +234,7 @@ end
 function love.draw()
 	
 	for i, enemy in ipairs(enemies) do
-	  love.graphics.draw(enemy.img, enemy.x, enemy.y)
+	  love.graphics.draw(enemy.img, enemy.x, enemy.y, enemy.theta, 1, 1, enemy.ox, enemy.oy)
 	end
 	
 	for i, bullet in ipairs(player.bullets) do
