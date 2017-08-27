@@ -18,8 +18,8 @@ function love.load(arg)
 	table.insert(exploSounds,love.audio.newSource("assets/explo1.ogg", "static"));
 	table.insert(exploSounds,love.audio.newSource("assets/explo2.ogg", "static"));
 	
-	table.insert(enemyTypes, { img = enemyImg, theta = 0, ox = enemyImg:getWidth() / 2, oy = enemyImg:getHeight() / 2, numExplosions = 1 });
-	table.insert(enemyTypes, { img = b17Img, theta = math.pi, ox = b17Img:getWidth() / 2, oy = b17Img:getHeight() / 2, numExplosions = 3 });
+	table.insert(enemyTypes, { img = enemyImg, theta = 0, points = 10, health = 1, ox = enemyImg:getWidth() / 2, oy = enemyImg:getHeight() / 2, numExplosions = 1 });
+	table.insert(enemyTypes, { img = b17Img, theta = math.pi, points = 20, health = 2, ox = b17Img:getWidth() / 2, oy = b17Img:getHeight() / 2, numExplosions = 3 });
 	
 	start()
 end
@@ -63,15 +63,17 @@ function addEnemy()
 	local img = enemyTypes[idx].img;
 	local theta = enemyTypes[idx].theta;
 	
-	local enemy = { x = math.random(10, love.graphics.getWidth() - 10),
+	local enemy = { 
+		alive = true,
+		x = math.random(10, love.graphics.getWidth() - 10),
 		y = -img:getHeight(),
 		img = img,
 		dx = 0,
 		dy = 150,
-		points = 10,
 		theta = theta,
 		ox = enemyTypes[idx].ox,
 		oy = enemyTypes[idx].oy,
+		health = enemyTypes[idx].health,
 		enemyType = enemyTypes[idx]
 	}
 	table.insert(enemies, enemy)
@@ -93,33 +95,47 @@ function spawnExplosions(x,y,count)
 	end
 end
 
+function hitEnemy(enemy)
+	enemy.health = enemy.health - 1;
+	if (enemy.health < 1) then
+		enemy.alive = false;
+		game.score = game.score + enemy.enemyType.points;
+		local boom = exploSounds[math.random(1,#exploSounds)]:clone();
+		love.audio.play(boom);
+		spawnExplosions(enemy.x,enemy.y,enemy.enemyType.numExplosions);
+		return true;
+	end
+	return false;
+end
+
 function collisions()
 	for i, enemy in ipairs(enemies) do
-		for j, bullet in ipairs(player.bullets) do
-			if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x, bullet.y, bullet.img:getWidth(), bullet.img:getHeight()) then
-				table.remove(player.bullets, j)
-				table.remove(enemies, i)
-				game.score = game.score + enemy.points
-				enemy.points = 0
-				local boom = exploSounds[math.random(1,#exploSounds)]:clone();
-				love.audio.play(boom);
-				spawnExplosions(enemy.x,enemy.y,enemy.enemyType.numExplosions);
+		if (enemy.alive) then
+			for j, bullet in ipairs(player.bullets) do
+				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x, bullet.y, bullet.img:getWidth(), bullet.img:getHeight()) then
+					table.remove(player.bullets, j)
+					if (hitEnemy(enemy)) then
+						table.remove(enemies, i)
+					else
+						effects:spawn('blueSparks',bullet.x + math.random(-40,40),bullet.y + math.random(-40,40));
+					end
+				end
 			end
-		end
 
-		if (player.alive) then
-			if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth(), enemy.img:getHeight(), player.x, player.y, player.img:getWidth() * 0.7, player.img:getHeight() * 0.7) then 
-				table.remove(enemies, i)
-				player.alive = false
-				local x = player.x + player.img:getWidth() * 0.5;
-				local y = player.y + player.img:getHeight() * 0.5;
-				spawnExplosions(x,y,4);
-				effects:spawn('redSparks',x + math.random(-40,40),y + math.random(-40,40));
-				effects:spawn('greenSparks',x + math.random(-40,40),y + math.random(-40,40));
-				effects:spawn('blueSparks',x + math.random(-40,40),y + math.random(-40,40));
-				
-				local boom = exploSounds[math.random(1,#exploSounds)]:clone();
-				love.audio.play(boom);
+			if (player.alive) then
+				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth(), enemy.img:getHeight(), player.x, player.y, player.img:getWidth() * 0.7, player.img:getHeight() * 0.7) then 
+					table.remove(enemies, i)
+					player.alive = false
+					local x = player.x + player.img:getWidth() * 0.5;
+					local y = player.y + player.img:getHeight() * 0.5;
+					spawnExplosions(x,y,4);
+					effects:spawn('redSparks',x + math.random(-40,40),y + math.random(-40,40));
+					effects:spawn('greenSparks',x + math.random(-40,40),y + math.random(-40,40));
+					effects:spawn('blueSparks',x + math.random(-40,40),y + math.random(-40,40));
+					
+					local boom = exploSounds[math.random(1,#exploSounds)]:clone();
+					love.audio.play(boom);
+				end
 			end
 		end
 	end
