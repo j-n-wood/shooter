@@ -53,6 +53,8 @@ effects.types['explosion'] = function(x,y)
 	effect.particles = p
 	effect.x = x
 	effect.y = y
+	effect.dx = 0
+	effect.dy = 0
 	effects.add(effect)
 	return effect
 end
@@ -61,13 +63,13 @@ effects.spawnSparks = function(x,y,r,g,b)
 	local eff = {}
 	local p = love.graphics.newParticleSystem(effects.images["part1"], 620)
 	p:setEmissionRate(300)
-	p:setSpeed(55, 75)
+	p:setSpeed(155, 175)
 	p:setLinearAcceleration(0,0,0,0)
 	p:setSizes(0.6, 0.3)
 	p:setColors(255, 255, 255, 255, r, g, b, 0)
 	p:setPosition(400, 300)
 	p:setEmitterLifetime(0.15)
-	p:setParticleLifetime(1)
+	p:setParticleLifetime(0.4)
 	p:setDirection(0)
 	p:setSpread(360)
 	p:setRadialAcceleration(-50)
@@ -78,6 +80,8 @@ effects.spawnSparks = function(x,y,r,g,b)
 	eff.particles = p
 	eff.x = x
 	eff.y = y
+	eff.dx = 0
+	eff.dy = 0
 	effects.add(eff)
 	return eff
 end
@@ -117,6 +121,8 @@ effects.types['charger'] = function(x,y)
 	effect.particles = p
 	effect.x = x
 	effect.y = y
+	effect.dx = 0
+	effect.dy = 0	
 	effects.add(effect)	
 	return effect
 end
@@ -127,13 +133,15 @@ effects.update = function(dt)
 	for idx, effect in pairs(effects.systems) do
 		if effect.alive then
 			effect.particles:update(dt)
+			effect.x = effect.x + effect.dx * dt
+			effect.y = effect.y + effect.dy * dt
 			if (effect.lifeTime > -1) then
 				effect.lifeTime = effect.lifeTime - dt
 				if (effect.lifeTime < 0.0) then
 					effects.systems[idx].alive = false
 					effects.systems[idx] = nil
 				end
-			end
+			end			
 		end --alive
 	end
 end

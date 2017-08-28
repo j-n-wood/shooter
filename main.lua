@@ -1,5 +1,6 @@
 require 'explosion'
 
+highScore = 0;
 playerImg = nil
 enemyImg = nil
 shootSound = nil
@@ -13,13 +14,22 @@ function love.load(arg)
 	bulletImg = love.graphics.newImage('assets/bullet.png')
 	enemyImg = love.graphics.newImage('assets/enemy.png')
 	b17Img = love.graphics.newImage('assets/B-17-2.png');
+	enemyShotImg = love.graphics.newImage('assets/shotoval.png');
 	
 	shootSound = love.audio.newSource("assets/gun-sound.wav", "static")
 	table.insert(exploSounds,love.audio.newSource("assets/explo1.ogg", "static"));
 	table.insert(exploSounds,love.audio.newSource("assets/explo2.ogg", "static"));
 	
-	table.insert(enemyTypes, { img = enemyImg, theta = 0, points = 10, health = 1, ox = enemyImg:getWidth() / 2, oy = enemyImg:getHeight() / 2, numExplosions = 1 });
-	table.insert(enemyTypes, { img = b17Img, theta = math.pi, points = 20, health = 2, ox = b17Img:getWidth() / 2, oy = b17Img:getHeight() / 2, numExplosions = 3 });
+	table.insert(enemyTypes, 
+		{ img = enemyImg, theta = 0, points = 10, health = 1, ox = enemyImg:getWidth() / 2, oy = enemyImg:getHeight() / 2, 
+			numExplosions = 1,
+			fireDelay = 1.5,
+			speed = 150 });
+	table.insert(enemyTypes, 
+		{ img = b17Img, theta = math.pi, points = 20, health = 2, ox = b17Img:getWidth() / 2, oy = b17Img:getHeight() / 2, 
+			numExplosions = 3,
+			fireDelay = 1.0,
+			speed = 120});
 	
 	start()
 end
@@ -28,6 +38,7 @@ function start()
 
 	game = {
 		score = 0,
+		enemyBullets = {}
 	}
 	
 	wave = {
@@ -47,15 +58,32 @@ function start()
 	}
 	
 	player.canShootTimer = player.canShootTimerMax
-	player.img = playerImg
+
+	setImage(player,playerImg, 0.7, 0.4);
 	
 	enemies = {}
 end
 
+function setImage(object, image, colx, coly)
+	object.img = image;
+	object.cx = image:getWidth() * colx;
+	object.cy = image:getHeight() * coly;
+	object.ox = image:getWidth() * 0.5;
+	object.oy = image:getHeight() * 0.5;
+end
+
 function addBullet()
-	local newBullet = { x = player.x + (player.img:getWidth()/2), y = player.y, img = bulletImg, dx = 0, dy = -250 }
+	local newBullet = { x = player.x, y = player.y - player.oy, dx = 0, dy = -250 }
+	setImage(newBullet, bulletImg, 0.7, 0.7);
 	table.insert(player.bullets, newBullet)
 	shootSound:play();
+end
+
+function addEnemyBullet(x, y, dx, dy)
+	local newBullet = { x = x, y = y, dx = dx, dy = dy }
+	setImage(newBullet, enemyShotImg, 0.7, 0.7);
+	table.insert(game.enemyBullets, newBullet)
+	--shootSound:play();
 end
 
 function addEnemy() 
@@ -63,18 +91,21 @@ function addEnemy()
 	local img = enemyTypes[idx].img;
 	local theta = enemyTypes[idx].theta;
 	
+	local enemyType = enemyTypes[idx];
+	
 	local enemy = { 
 		alive = true,
 		x = math.random(10, love.graphics.getWidth() - 10),
 		y = -img:getHeight(),
 		img = img,
 		dx = 0,
-		dy = 150,
+		dy = enemyType.speed,
 		theta = theta,
 		ox = enemyTypes[idx].ox,
 		oy = enemyTypes[idx].oy,
 		health = enemyTypes[idx].health,
-		enemyType = enemyTypes[idx]
+		enemyType = enemyTypes[idx],
+		timer = math.random(1,100) * 0.007;
 	}
 	table.insert(enemies, enemy)
 end
@@ -90,7 +121,7 @@ function spawnExplosions(x,y,count)
 	effects:spawn('explosion',x,y);
 	if (count > 1) then
 		for i=2,count,1 do
-			effects:spawn('explosion',x + math.random(-30,30),y + math.random(-30,30));
+			effects:spawn('explosion',x + math.random(-50,50),y + math.random(-50,50));
 		end
 	end
 end
@@ -100,6 +131,9 @@ function hitEnemy(enemy)
 	if (enemy.health < 1) then
 		enemy.alive = false;
 		game.score = game.score + enemy.enemyType.points;
+		if (game.score > highScore) then
+			highScore = game.score;
+		end
 		local boom = exploSounds[math.random(1,#exploSounds)]:clone();
 		love.audio.play(boom);
 		spawnExplosions(enemy.x,enemy.y,enemy.enemyType.numExplosions);
@@ -108,11 +142,28 @@ function hitEnemy(enemy)
 	return false;
 end
 
+function hitPlayer()
+	player.alive = false
+	local x = player.x;
+	local y = player.y;
+	spawnExplosions(x,y,4);
+	local sparks = effects:spawn('redSparks',x + math.random(-40,40),y + math.random(-40,40));
+	sparks.dx = math.random(-400,400); sparks.dy = math.random(-400,400);
+	sparks = effects:spawn('greenSparks',x + math.random(-40,40),y + math.random(-40,40));
+	sparks.dx = math.random(-400,400); sparks.dy = math.random(-400,400);
+	sparks = effects:spawn('blueSparks',x + math.random(-40,40),y + math.random(-40,40));
+	sparks.dx = math.random(-400,400); sparks.dy = math.random(-400,400);
+	
+	local boom = exploSounds[math.random(1,#exploSounds)]:clone();
+	love.audio.play(boom);
+end
+
 function collisions()
 	for i, enemy in ipairs(enemies) do
 		if (enemy.alive) then
 			for j, bullet in ipairs(player.bullets) do
-				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x, bullet.y, bullet.img:getWidth(), bullet.img:getHeight()) then
+				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, bullet.x - bullet.ox, bullet.y - bullet.oy, 
+					bullet.cx, bullet.cy) then
 					table.remove(player.bullets, j)
 					if (hitEnemy(enemy)) then
 						table.remove(enemies, i)
@@ -123,19 +174,19 @@ function collisions()
 			end
 
 			if (player.alive) then
-				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth(), enemy.img:getHeight(), player.x, player.y, player.img:getWidth() * 0.7, player.img:getHeight() * 0.7) then 
+				if checkCollision(enemy.x - enemy.ox, enemy.y - enemy.oy, enemy.img:getWidth() *0.8, enemy.img:getHeight() * 0.6, player.x - player.ox, player.y - player.oy, player.cx, player.cy) then 
 					table.remove(enemies, i)
-					player.alive = false
-					local x = player.x + player.img:getWidth() * 0.5;
-					local y = player.y + player.img:getHeight() * 0.5;
-					spawnExplosions(x,y,4);
-					effects:spawn('redSparks',x + math.random(-40,40),y + math.random(-40,40));
-					effects:spawn('greenSparks',x + math.random(-40,40),y + math.random(-40,40));
-					effects:spawn('blueSparks',x + math.random(-40,40),y + math.random(-40,40));
-					
-					local boom = exploSounds[math.random(1,#exploSounds)]:clone();
-					love.audio.play(boom);
+					hitPlayer();
 				end
+			end
+		end
+	end
+	
+	if (player.alive) then
+		for j, bullet in ipairs(game.enemyBullets) do
+			if checkCollision(player.x - player.ox, player.y - player.oy, player.cx, player.cy, bullet.x - bullet.ox, bullet.y - bullet.oy, bullet.cx, bullet.cy) then
+				table.remove(game.enemyBullets, j)
+				hitPlayer();
 			end
 		end
 	end
@@ -158,10 +209,16 @@ function updateWave(wave, dt)
 end
 
 function updateEnemy(enemy, dt)
-	enemy.x = enemy.x + (enemy.dx * dt)
-	enemy.y = enemy.y + (enemy.dy * dt)
+	enemy.x = enemy.x + (enemy.dx * dt);
+	enemy.y = enemy.y + (enemy.dy * dt);
+	
+	enemy.timer = enemy.timer + dt;
+	if (enemy.timer > enemy.enemyType.fireDelay) then
+		addEnemyBullet(enemy.x, enemy.y + enemy.img:getHeight() * 0.2, 0, 220);
+		enemy.timer = 0.0;
+	end
 
-	if enemy.y > love.graphics.getHeight() then -- remove enemies when they pass off the screen
+	if (enemy.y > (love.graphics.getHeight() + enemy.oy)) then -- remove enemies when they pass off the screen
 		return false;
 	end
 	return true;
@@ -201,11 +258,11 @@ function love.update(dt)
 		end
 	
 		if love.keyboard.isDown('left','a') then
-			if player.x > 0 then -- binds us to the map
+			if player.x > player.ox * 0.5 then -- binds us to the map
 				player.x = player.x - (player.dx*dt)
 			end
 		elseif love.keyboard.isDown('right','d') then
-			if player.x < (love.graphics.getWidth() - player.img:getWidth()) then
+			if player.x < (love.graphics.getWidth() - player.ox * 0.5) then
 				player.x = player.x + (player.dx*dt)
 			end
 		end
@@ -224,12 +281,19 @@ function love.update(dt)
 	
 	if love.keyboard.isDown('b') then
 		--addEnemy()
-		effects:spawn('explosion',100,100);
+		--effects:spawn('explosion',100,100);
+		addEnemyBullet(100,100,0,250);
 	end
 
 	for i, bullet in ipairs(player.bullets) do
 		if (updateBullet(bullet,dt) == false) then -- remove bullets when they pass off the screen
 			table.remove(player.bullets, i)
+		end
+	end
+	
+	for i, bullet in ipairs(game.enemyBullets) do
+		if (updateBullet(bullet,dt) == false) then -- remove bullets when they pass off the screen
+			table.remove(game.enemyBullets, i)
 		end
 	end
 	
@@ -254,18 +318,23 @@ function love.draw()
 	end
 	
 	for i, bullet in ipairs(player.bullets) do
-	  love.graphics.draw(bulletImg, bullet.x, bullet.y)
+	  love.graphics.draw(bullet.img, bullet.x, bullet.y)
+	end
+	
+	for i, bullet in ipairs(game.enemyBullets) do
+	  love.graphics.draw(bullet.img, bullet.x, bullet.y)
 	end
 	
 		--love.graphics.setColor(20,255,0,255)
   
 	if (player.alive == true) then
-		love.graphics.draw(player.img, player.x, player.y) 
+		love.graphics.draw(player.img, player.x, player.y, 0, 1, 1, player.ox, player.oy); 
 	end
 	
 	effects.draw(effects.systems);
 	
 	love.graphics.print("SCORE " .. game.score, 0,0);
+	love.graphics.printf("HIGH " .. highScore, love.graphics.getWidth() - 100, 0, 100, "right");
 	
 	if (player.alive == false) then
 			love.graphics.print("Press R to restart", 50,100);
