@@ -15,8 +15,10 @@ function love.load(arg)
 	enemyImg = love.graphics.newImage('assets/enemy.png')
 	b17Img = love.graphics.newImage('assets/B-17-2.png');
 	enemyShotImg = love.graphics.newImage('assets/shotoval.png');
+	cloudImg = love.graphics.newImage('assets/cloud_1.jpg');
 	
-	shootSound = love.audio.newSource("assets/gun-sound.wav", "static")
+	shootSound = love.audio.newSource("assets/gun-sound.wav", "static");
+	shoot_2_sound = love.audio.newSource("assets/bang2.wav", "static");
 	table.insert(exploSounds,love.audio.newSource("assets/explo1.ogg", "static"));
 	table.insert(exploSounds,love.audio.newSource("assets/explo2.ogg", "static"));
 	
@@ -38,7 +40,8 @@ function start()
 
 	game = {
 		score = 0,
-		enemyBullets = {}
+		enemyBullets = {},
+		clouds = {}
 	}
 	
 	wave = {
@@ -61,7 +64,27 @@ function start()
 
 	setImage(player,playerImg, 0.7, 0.4);
 	
-	enemies = {}
+	enemies = {};
+	
+	game.addCloud = function(game)
+		local newCloud = {
+			alive = true,
+			x = math.random(10, love.graphics.getWidth() - 10),
+			y = math.random(10, love.graphics.getHeight() - 10),
+			img = cloudImg,
+			dx = 0,
+			dy = 70 + math.random(1,15),
+			sx = 0.7 + (math.random(1,60) * 0.01),
+			sy = 0.7 + (math.random(1,60) * 0.01),
+			ox = cloudImg:getWidth() * 0.5,
+			oy = cloudImg:getHeight() * 0.5
+			};
+		table.insert(game.clouds, newCloud);
+	end
+	
+	for i = 1,3,1 do
+		game:addCloud();
+	end
 end
 
 function setImage(object, image, colx, coly)
@@ -75,7 +98,7 @@ end
 function addBullet()
 	local newBullet = { x = player.x, y = player.y - player.oy, dx = 0, dy = -250 }
 	setImage(newBullet, bulletImg, 0.7, 0.7);
-	table.insert(player.bullets, newBullet)
+	table.insert(player.bullets, newBullet);
 	shootSound:play();
 end
 
@@ -105,7 +128,7 @@ function addEnemy()
 		oy = enemyTypes[idx].oy,
 		health = enemyTypes[idx].health,
 		enemyType = enemyTypes[idx],
-		timer = math.random(1,100) * 0.007;
+		timer = math.random(-100,100) * 0.007;
 	}
 	table.insert(enemies, enemy)
 end
@@ -216,6 +239,8 @@ function updateEnemy(enemy, dt)
 	if (enemy.timer > enemy.enemyType.fireDelay) then
 		addEnemyBullet(enemy.x, enemy.y + enemy.img:getHeight() * 0.2, 0, 220);
 		enemy.timer = 0.0;
+		local shotSound = shoot_2_sound:clone();
+		love.audio.play(shotSound);
 	end
 
 	if (enemy.y > (love.graphics.getHeight() + enemy.oy)) then -- remove enemies when they pass off the screen
@@ -243,11 +268,34 @@ function updateBullet(bullet, dt)
 	return true;
 end
 
+function updateSprite(sprite, dt)
+	sprite.x = sprite.x + (sprite.dx * dt);
+	sprite.y = sprite.y + (sprite.dy * dt);
+	
+	if sprite.y > love.graphics.getHeight() + sprite.ox then -- remove when they pass off the screen
+		return false;
+	end
+	
+	return true;
+end
+
+function update(game, dt)
+	for i, cloud in ipairs(game.clouds) do
+		if (updateSprite(cloud, dt) == false) then
+			--remove or reset
+			cloud.x = math.random(10, love.graphics.getWidth() - 10);
+			cloud.y = -cloudImg:getHeight();
+		end
+	end
+end
+
 function love.update(dt)
 	-- I always start with an easy way to exit the game
 	if love.keyboard.isDown('escape') then
 		love.event.push('quit')
 	end
+	
+	update(game, dt);
 	
 	if (player.alive) then
 		if (player.canShootTimer > 0) then
@@ -312,6 +360,11 @@ function love.update(dt)
 end
 
 function love.draw()
+	love.graphics.setBlendMode("add");
+	for i, cloud in ipairs(game.clouds) do
+	  love.graphics.draw(cloud.img, cloud.x, cloud.y, cloud.theta or 0, cloud.sx or 1, cloud.sy or 1, cloud.ox or 0.0, cloud.oy or 0.0)
+	end
+	love.graphics.setBlendMode("alpha");
 	
 	for i, enemy in ipairs(enemies) do
 	  love.graphics.draw(enemy.img, enemy.x, enemy.y, enemy.theta, 1, 1, enemy.ox, enemy.oy)
